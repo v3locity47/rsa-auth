@@ -6,7 +6,8 @@ import { JwtAuthStrategy } from './jwt-auth.strategy';
 
 const jwtConfigFactory = async (configService: ConfigService) => {
   return {
-    secret: configService.get<string>('JWT_SECRET'),
+    privateKey: configService.get<string>('RSA_PRIVATE_KEY'),
+    publicKey: configService.get<string>('RSA_PUBLIC_KEY'),
     signOptions: {
       expiresIn: configService.get<string>('JWT_EXPIRES_IN'),
     },

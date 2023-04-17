@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { generatePrimeSync, randomBytes } from 'crypto';
 import { IKeyPair } from './rsa.interface';
+import forge from 'node-forge';
 
 Injectable();
 export class RSAService {
@@ -133,5 +134,14 @@ export class RSAService {
     }
 
     return plain.join('');
+  }
+
+  generateRSAKeyPairPEM(n, e, d, p, q, dp, dq, qinv) {
+    const publicKey = forge.pki.setRsaPublicKey(n, e);
+    const privateKey = forge.pki.setRsaPrivateKey(n, e, d, p, q, dp, dq, qinv);
+    const pemPublicKey = forge.pki.publicKeyToPem(publicKey);
+    const pemPrivateKey = forge.pki.privateKeyToPem(privateKey);
+
+    return { publicKey: pemPublicKey, privateKey: pemPrivateKey };
   }
 }

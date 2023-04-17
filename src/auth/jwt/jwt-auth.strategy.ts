@@ -23,7 +23,8 @@ export class JwtAuthStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: extractJwt,
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>('JWT_SECRET'),
+      secretOrKey: configService.get<string>('RSA_PUBLIC_KEY'),
+      algorithms: ['RS256'],
     });
   }
   async validate(payload: IJwtPayload) {
