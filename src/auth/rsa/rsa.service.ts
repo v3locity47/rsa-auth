@@ -4,97 +4,134 @@ import { IKeyPair } from './rsa.interface';
 
 Injectable();
 export class RSAService {
-  generatePrime() {
-    return generatePrimeSync(2048);
-  }
-  extendedGCD(a, b) {
-    console.log(a, b);
-    if (b === 0) {
-      return [a, 1, 0];
-    } else {
-      const [d, x, y] = this.extendedGCD(b, a % b);
-      return [d, y, x - y * Math.floor(a / b)];
+  gcd(a, b) {
+    while (b !== 0) {
+      const temp = b;
+      b = a % b;
+      a = temp;
     }
+    return a;
   }
-  modExp(b, e, m) {
-    let result = 1;
+  modPow(base, exponent, modulus) {
+    let result = 1n;
+    modulus = BigInt(modulus);
+    base = BigInt(base);
+    base %= modulus;
+
+    while (exponent > 0) {
+      if (exponent % 2 === 1) {
+        result = (result * base) % modulus;
+      }
+
+      exponent = Math.floor(exponent / 2);
+      base = (base * base) % modulus;
+    }
+
+    return result;
+  }
+
+  multiplicativeInverse(e, phi) {
+    let d = 0;
+    let x1 = 0;
+    let x2 = 1;
+    let y1 = 1;
+    let tempPhi = phi;
+
     while (e > 0) {
-      if ((e & 1) === 1) {
-        result = (result * b) % m;
-      }
-      b = (b * b) % m;
-      e >>= 1;
+      const temp1 = Math.floor(tempPhi / e);
+      const temp2 = tempPhi - temp1 * e;
+      tempPhi = e;
+      e = temp2;
+
+      const x = x2 - temp1 * x1;
+      const y = d - temp1 * y1;
+
+      x2 = x1;
+      x1 = x;
+      d = y1;
+      y1 = y;
     }
-    return BigInt(result);
-  }
 
-  async generateKeyPair() {
-    // Generate two large prime numbers
-    const p = generatePrimeSync(2048);
-    const q = generatePrimeSync(2048);
-
-    // Convert to BigInts
-    const bigP = BigInt('0x' + Buffer.from(p).toString('hex'));
-    const bigQ = BigInt('0x' + Buffer.from(q).toString('hex'));
-
-    // Calculate n, phi(n), and e
-    const n = bigP * bigQ;
-    const phiN = (bigP - 1n) * (bigQ - 1n);
-    const e = 65537n;
-
-    // Calculate d
-    const [d] = this.extendedGCD(e, phiN);
-
-    // Return the public and private keys
-    const publicKey = { n: n.toString(), e: e.toString() };
-    const privateKey = { n: n.toString(), d: d.toString() };
-    return { publicKey, privateKey };
-  }
-
-  async encryptRSA(message: string, publicKey: any) {
-    const messageBuffer = Buffer.from(message, 'utf8');
-    const paddingLength =
-      publicKey.n.toString(16).length -
-      messageBuffer.length.toString(16).length -
-      6;
-    const paddingBuffer = randomBytes(paddingLength);
-    const messageBufferWithPadding = Buffer.concat([
-      Buffer.from('0002', 'hex'),
-      paddingBuffer,
-      Buffer.from('00', 'hex'),
-      messageBuffer,
-    ]);
-    const m = BigInt('0x' + messageBufferWithPadding.toString('hex'));
-    const cipher = this.modExp(m, publicKey.e, publicKey.n);
-    const cipherBuffer = Buffer.from(cipher.toString(16), 'hex');
-    return cipherBuffer;
-  }
-
-  decryptRSA(ciphertext: any, privateKey: any) {
-    // Convert the ciphertext to a BigInt
-    const c = BigInt('0x' + ciphertext.toString('hex'));
-
-    // Decrypt the message with the private key
-    const m = this.modExp(c, privateKey.d, privateKey.n);
-
-    // Convert the message to a buffer
-    const mBuffer = Buffer.from(m.toString(16), 'hex');
-
-    // Verify and remove the padding
-    if (mBuffer[0] !== 0x00 || mBuffer[1] !== 0x02) {
-      throw new Error('Invalid padding');
+    if (tempPhi === 1) {
+      return d + phi;
     }
-    let i = 2;
-    while (mBuffer[i] !== 0x00) {
-      if (++i >= mBuffer.length) {
-        throw new Error('Invalid padding');
+  }
+  isPrime(num) {
+    if (num === 2) {
+      return true;
+    }
+    if (num < 2 || num % 2 === 0) {
+      return false;
+    }
+    for (let n = 3; n <= Math.sqrt(num) + 1; n += 2) {
+      if (num % n === 0) {
+        return false;
       }
     }
-    const messageBuffer = mBuffer.slice(i + 1);
+    return true;
+  }
+  generateKeyPair(p, q) {
+    if (!(this.isPrime(p) && this.isPrime(q))) {
+      throw new Error('Both numbers must be prime.');
+    } else if (p === q) {
+      throw new Error('p and q cannot be equal');
+    }
 
-    // Convert the message buffer to a string
-    const message = messageBuffer.toString('utf8');
+    // n = pq
+    const n = p * q;
 
-    return message;
+    // Phi is the totient of n
+    const phi = (p - 1) * (q - 1);
+
+    // Choose an integer e such that e and phi(n) are coprime
+    let e = Math.floor(Math.random() * phi) + 1;
+
+    // Use Euclid's Algorithm to verify that e and phi(n) are coprime
+    let g = this.gcd(e, phi);
+    while (g !== 1) {
+      e = Math.floor(Math.random() * phi) + 1;
+      g = this.gcd(e, phi);
+    }
+
+    // Use Extended Euclid's Algorithm to generate the private key
+    const d = this.multiplicativeInverse(e, phi);
+
+    // Return public and private key_pair
+    // Public key is (e, n) and private key is (d, n)
+    return {
+      publicKey: [e, n],
+      privateKey: [d, n],
+    };
+  }
+  encrypt(pk, plaintext) {
+    // Unpack the key into its components
+    const key = pk[0];
+    const n = pk[1];
+
+    // Convert each letter in the plaintext to numbers based on the character using a^b mod m
+    const cipher = [];
+    for (let i = 0; i < plaintext.length; i++) {
+      const charCode = plaintext.charCodeAt(i);
+      const encryptedCharCode = BigInt(charCode) ** BigInt(key) % BigInt(n);
+      cipher.push(encryptedCharCode);
+    }
+
+    // Return the array of bytes
+    return cipher;
+  }
+  decrypt(pk, ciphertext) {
+    // Unpack the key into its components
+    const [key, n] = pk;
+
+    // Generate the plaintext based on the ciphertext and key using a^b mod m
+    const plain = [];
+
+    for (const char of ciphertext) {
+      const charCode = this.modPow(char, key, n);
+      const new2 = Number(charCode);
+      plain.push(String.fromCharCode(new2));
+    }
+
+    return plain.join('');
   }
 }
