@@ -3,7 +3,7 @@ export class UserSignUpDto {
   firstName: string;
   lastName: string;
   password: string;
-  age: number;
+  age: string;
 }
 
 export class UserSignInDto {
